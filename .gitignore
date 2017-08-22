@@ -31,5 +31,6 @@ build/
 # Temporary
 *.swp
 objs
+.idea/
 *.depend
 

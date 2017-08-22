@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-setup.py file for pypylibmmal
+setup.py file for pylibmmal
 """
 import platform
 from setuptools import setup, Extension
@@ -9,7 +9,6 @@ NAME = 'pylibmmal'
 VERSION = '0.0'
 SOURCES = 'pylibmmal.c'
 lines = [x for x in open(SOURCES).read().split("\n") if "#define" in x and "_VERSION_" in x and "\"" in x]
-
 
 
 if len(lines) > 0:
@@ -31,7 +30,6 @@ pylibmmal_module = Extension(NAME,
                              library_dirs=['/opt/vc/lib'],
                              libraries=['bcm_host', 'mmal', 'mmal_util', 'mmal_core'],
                              include_dirs=['/opt/vc/include', '/opt/vc/include/interface/mmal'])
-
 
 
 setup(
