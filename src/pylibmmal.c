@@ -1,9 +1,9 @@
 #include <Python.h>
+#include "constants.h"
 #include "mmal_graph.h"
+#include "tv_service.h"
 
 
-#define LCD 4
-#define HDMI 5
 #define _VERSION_ "0.1"
 #define _NAME_ "pylibmmal"
 PyDoc_STRVAR(pylibmmal_doc, "Raspberry Multi-Media Abstraction Layer Library.\n");
@@ -14,13 +14,13 @@ static PyMethodDef pylibmmal_methods[] = {
 };
 
 
-#if PY_MAJOR_VERSION > 2
+#if PY_MAJOR_VERSION >= 3
 static struct PyModuleDef pylibmmalmodule = {
 	PyModuleDef_HEAD_INIT,
-       	_NAME_,		/* Module name */
-	pylibmmal_doc,	/* Module pylibi2cMethods */
-       	-1,			/* size of per-interpreter state of the module, size of per-interpreter state of the module,*/
-	pylibmmal_methods,
+    _NAME_,		            /* Module name */
+	pylibmmal_doc,	        /* Module pylibi2cMethods */
+    -1,			            /* size of per-interpreter state of the module, size of per-interpreter state of the module,*/
+	pylibmmal_methods,      /* Module methods */
 };
 #endif
 
@@ -43,6 +43,15 @@ PyMODINIT_FUNC initpylibmmal(void)
 #endif
 	}
 
+    if (PyType_Ready(&TVServiceObjectType) < 0) {
+
+#if PY_MAJOR_VERSION >= 3
+		return NULL;
+#else
+		return;
+#endif
+	}
+
 #if PY_MAJOR_VERSION >= 3
 	module = PyModule_Create(&pylibmmalmodule);
 	PyObject *version = PyUnicode_FromString(_VERSION_);
@@ -50,19 +59,22 @@ PyMODINIT_FUNC initpylibmmal(void)
 	module = Py_InitModule3(_NAME_, pylibmmal_methods, pylibmmal_doc);
 	PyObject *version = PyString_FromString(_VERSION_);
 #endif
-	PyObject *dict = PyModule_GetDict(module);
-	PyDict_SetItemString(dict, "__version__", version);
-	Py_DECREF(version);
 
-	PyObject *lcd = Py_BuildValue("i", LCD);
-	PyModule_AddObject(module, "LCD", lcd);
+    /* Version */
+    PyObject *dict = PyModule_GetDict(module);
+    PyDict_SetItemString(dict, "__version__", version);
+    Py_DECREF(version);
 
-	PyObject *hdmi = Py_BuildValue("i", HDMI);
-	PyModule_AddObject(module, "HDMI", hdmi);
+    /* Constants */
+    define_constants(module);
 
+    /* TVService */
+    Py_INCREF(&TVServiceObjectType);
+    PyModule_AddObject(module, TVService_name, (PyObject *)&TVServiceObjectType);
+
+    /* MmalGraph */
 	Py_INCREF(&PyMmalGraphObjectType);
 	PyModule_AddObject(module, PyMmalGraph_name, (PyObject *)&PyMmalGraphObjectType);
-
 
 #if PY_MAJOR_VERSION >= 3
 	return module;
