@@ -5,8 +5,8 @@ AR		= $(CROSS)ar:wq
 CFLAGS		= -Wall -g
 ARFLAGS		= rcv
 
-SOURCES=pylibmmal.c
-HEADERS=
+SOURCES=$(wildcard src/*.c)
+HEADERS=$(wildcard src/*.h)
 OBJECTS=$(SOURCES:.c=.o)
 TARGETS = pylibmmal.so
 
@@ -17,7 +17,7 @@ all:$(TARGETS) example
 
 clean:
 	find . -name "*.o" | xargs rm -f 
-	$(RM) *.o *.so *~ a.out .depend $(TARGETS) build -rf
+	$(RM) *.o *.so *~ a.out .depend $(TARGETS) build dist *.egg-info -rf
 
 test:
 	$(PYTHON) -m unittest discover tests 

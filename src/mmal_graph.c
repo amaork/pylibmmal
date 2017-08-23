@@ -5,14 +5,10 @@
 #include <util/mmal_graph.h>
 #include <util/mmal_util_params.h>
 #include <util/mmal_default_components.h>
+#include "mmal_graph.h"
 
-#define LCD 4
-#define HDMI 5
-#define _VERSION_ "0.1"
-#define _NAME_ "pylibmmal"
-PyDoc_STRVAR(pylibmmal_doc, "Raspberry Multi-Media Abstraction Layer Library.\n");
+
 PyDoc_STRVAR(PyMmalGraphObject_type_doc, "MmalGraph() -> Video core graph object.\n");
-
 typedef struct {
 	PyObject_HEAD;
 	MMAL_GRAPH_T *graph;
@@ -25,7 +21,7 @@ static PyObject *PyMmalGraph_new(PyTypeObject *type, PyObject *args, PyObject *k
 
 	PyMmalGraphObject *self;
 	if ((self = (PyMmalGraphObject *)type->tp_alloc(type, 0)) == NULL){
-		
+
 		return NULL;
 	}
 
@@ -122,7 +118,7 @@ static void graph_control_cb(MMAL_GRAPH_T *graph, MMAL_PORT_T *port, MMAL_BUFFER
 PyDoc_STRVAR(PyMmalGraph_open_doc, "open(uri)\n\nOpen a uri to start playback.\n");
 #define CHECK_STATUS(status, msg) if (status != MMAL_SUCCESS) { fprintf(stderr, msg"\n"); goto error; }
 static PyObject* PyMmalGraph_open(PyMmalGraphObject *self, PyObject *args, PyObject *kwds) {
-	
+
 	char *uri = NULL;
 	MMAL_STATUS_T status;
     	MMAL_DISPLAYREGION_T param;
@@ -179,8 +175,8 @@ error:
 
 
 /* pylibi2c module methods */
-static PyMethodDef PyMmalGraph_methods[] = { 
-	
+static PyMethodDef PyMmalGraph_methods[] = {
+
 	{"open", (PyCFunction)PyMmalGraph_open, METH_VARARGS, PyMmalGraph_open_doc},
 	{"close", (PyCFunction)PyMmalGraph_close, METH_NOARGS, PyMmalGraph_close_doc},
 	{"__enter__", (PyCFunction)PyMmalGraph_enter, METH_NOARGS, NULL},
@@ -189,14 +185,14 @@ static PyMethodDef PyMmalGraph_methods[] = {
 };
 
 
-static PyTypeObject PyMmalGraphObjectType = {
+PyTypeObject PyMmalGraphObjectType = {
 #if PY_MAJOR_VERSION >= 3
 	PyVarObject_HEAD_INIT(NULL, 0)
 #else
 	PyObject_HEAD_INIT(NULL)
 	0,				/* ob_size */
 #endif
-	"MmalGraph",			/* tp_name */
+	PyMmalGraph_name,		/* tp_name */
 	sizeof(PyMmalGraphObject),	/* tp_basicsize */
 	0,				/* tp_itemsize */
 	(destructor)PyMmalGraph_free,	/* tp_dealloc */
@@ -234,64 +230,4 @@ static PyTypeObject PyMmalGraphObjectType = {
 	0,				/* tp_alloc */
 	PyMmalGraph_new,		/* tp_new */
 };
-
-static PyMethodDef pylibmmal_methods[] = {
-	{NULL}
-};
-
-
-#if PY_MAJOR_VERSION > 2
-static struct PyModuleDef pylibmmalmodule = {
-	PyModuleDef_HEAD_INIT,
-       	_NAME_,		/* Module name */
-	pylibmmal_doc,	/* Module pylibi2cMethods */
-       	-1,			/* size of per-interpreter state of the module, size of per-interpreter state of the module,*/
-	pylibmmal_methods,
-};
-#endif
-
-
-#if PY_MAJOR_VERSION >= 3
-PyMODINIT_FUNC PyInit_pylibmmal(void)
-#else
-PyMODINIT_FUNC initpylibmmal(void)
-#endif
-{
-
-	PyObject *module;
-
-	if (PyType_Ready(&PyMmalGraphObjectType) < 0) {
-
-#if PY_MAJOR_VERSION >= 3
-		return NULL;
-#else
-		return;
-#endif
-	}
-
-#if PY_MAJOR_VERSION >= 3
-	module = PyModule_Create(&pylibmmalmodule);
-	PyObject *version = PyUnicode_FromString(_VERSION_);
-#else
-	module = Py_InitModule3(_NAME_, pylibmmal_methods, pylibmmal_doc);
-	PyObject *version = PyString_FromString(_VERSION_);
-#endif
-	PyObject *dict = PyModule_GetDict(module);
-	PyDict_SetItemString(dict, "__version__", version);
-	Py_DECREF(version);
-
-	PyObject *lcd = Py_BuildValue("i", LCD);
-	PyModule_AddObject(module, "LCD", lcd);
-
-	PyObject *hdmi = Py_BuildValue("i", HDMI);
-	PyModule_AddObject(module, "HDMI", hdmi);
-
-	Py_INCREF(&PyMmalGraphObjectType);
-	PyModule_AddObject(module, "MmalGraph", (PyObject *)&PyMmalGraphObjectType);
-
-
-#if PY_MAJOR_VERSION >= 3
-	return module;
-#endif
-}
 
