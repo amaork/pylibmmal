@@ -7,6 +7,9 @@ class TVServiceTest(unittest.TestCase):
     def setUp(self):
         self.tv = pylibmmal.TVService()
 
+    def test_status(self):
+        print(self.tv.get_status())
+
     def test_support_modes(self):
         print("HDMI Support modes:")
         for mode in self.tv.get_modes():

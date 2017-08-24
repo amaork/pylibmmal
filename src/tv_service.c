@@ -25,7 +25,6 @@ typedef struct {
 } TVServiceObject;
 
 
-
 static PyObject *TVService_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
 
     TVServiceObject *self;
@@ -68,7 +67,7 @@ static int TVService_init(TVServiceObject *self, PyObject *args, PyObject *kwds)
     /* Initialize VCOS */
     vcos_init();
 
-    // Initialize the VCHI connection
+    /* Initialize the VCHI connection */
     ret = vchi_initialise(&self->vchi_instance);
     CHECK_ERROR(ret, "Failed to initialize VCHI");
 
@@ -245,7 +244,7 @@ static const char *aspect_ratio_str(HDMI_ASPECT_T aspect_ratio) {
 PyDoc_STRVAR(TVService_get_modes_doc, "get_modes()\n\nGet supported modes for GROUP (CEA, DMT)\n");
 static PyObject* TVService_get_modes(TVServiceObject *self, PyObject *args, PyObject *kwds) {
 
-    int num_modes, i, j;
+    uint32_t num_modes, i, j;
     char *group_name = NULL;
     PyObject *item = NULL, *modes = PyList_New(0);
     static TV_SUPPORTED_MODE_NEW_T supported_modes[MAX_MODE_ID];
@@ -273,14 +272,14 @@ static PyObject* TVService_get_modes(TVServiceObject *self, PyObject *args, PyOb
         for (j = 0; j < num_modes; j++) {
 
             item = PyDict_New();
-            PyDict_SetItem(item, PyString_FromString("mode"), PyLong_FromLong(supported_modes[j].code));
-            PyDict_SetItem(item, PyString_FromString("rate"), PyLong_FromLong(supported_modes[j].frame_rate));
-            PyDict_SetItem(item, PyString_FromString("clock"), PyLong_FromLong(supported_modes[j].pixel_freq / 1000000U));
+            PyDict_SetItem(item, PyUnicode_FromString("mode"), PyLong_FromLong(supported_modes[j].code));
+            PyDict_SetItem(item, PyUnicode_FromString("rate"), PyLong_FromLong(supported_modes[j].frame_rate));
+            PyDict_SetItem(item, PyUnicode_FromString("clock"), PyLong_FromLong(supported_modes[j].pixel_freq / 1000000U));
 
-            PyDict_SetItemString(item, "group", PyString_FromString(group_name));
-            PyDict_SetItemString(item, "scan_mode", PyString_FromString(supported_modes[j].scan_mode ? "i" : "p"));
-            PyDict_SetItemString(item, "ratio", PyString_FromString(aspect_ratio_str(supported_modes[j].aspect_ratio)));
-            PyDict_SetItemString(item, "res", PyString_FromFormat("%ux%u", supported_modes[j].width, supported_modes[j].height));
+            PyDict_SetItemString(item, "group", PyUnicode_FromString(group_name));
+            PyDict_SetItemString(item, "scan_mode", PyUnicode_FromString(supported_modes[j].scan_mode ? "i" : "p"));
+            PyDict_SetItemString(item, "ratio", PyUnicode_FromString(aspect_ratio_str(supported_modes[j].aspect_ratio)));
+            PyDict_SetItemString(item, "res", PyUnicode_FromFormat("%ux%u", supported_modes[j].width, supported_modes[j].height));
 
             /* Append to modes */
             PyList_Append(modes, item);
@@ -291,6 +290,33 @@ out:
     return modes;
 }
 
+PyDoc_STRVAR(TVService_get_status_doc, "get_status()\n\nGet HDMI status\n");
+static PyObject* TVService_get_status(TVServiceObject *self, PyObject *args, PyObject *kwds) {
+
+    int ret;
+    float frame_rate;
+    TV_DISPLAY_STATE_T tvstate;
+    PyObject *state = PyDict_New();
+
+    ret = vc_tv_get_display_state(&tvstate);
+    CHECK_ERROR(ret, "Failed to get current display state");
+
+    HDMI_PROPERTY_PARAM_T property;
+    property.property = HDMI_PROPERTY_PIXEL_CLOCK_TYPE;
+    vc_tv_hdmi_get_property(&property);
+    frame_rate = property.param1 == HDMI_PIXEL_CLOCK_TYPE_NTSC ? tvstate.display.hdmi.frame_rate * (1000.0f / 10001.0f) : tvstate.display.hdmi.frame_rate;
+
+    PyDict_SetItem(state, PyUnicode_FromString("rate"), PyLong_FromLong(frame_rate));
+    PyDict_SetItem(state, PyUnicode_FromString("mode"), PyLong_FromLong(tvstate.display.hdmi.mode));
+    PyDict_SetItemString(state, "scan_mode", PyUnicode_FromString(tvstate.display.hdmi.scan_mode ? "i" : "p"));
+    PyDict_SetItemString(state, "group", PyUnicode_FromString(HDMI_RES_GROUP_NAME(tvstate.display.hdmi.group)));
+    PyDict_SetItemString(state, "ratio", PyUnicode_FromString(aspect_ratio_str(tvstate.display.hdmi.aspect_ratio)));
+    PyDict_SetItemString(state, "res", PyUnicode_FromFormat("%ux%u", tvstate.display.hdmi.width, tvstate.display.hdmi.height));
+
+error:
+    return state;
+}
+
 
 PyDoc_STRVAR(TVService_preferred_mode_doc, "preferred_mode()\n\nGet HDMI preferred modes for (GROUP, MODE)\n");
 static PyObject* TVService_preferred_mode(TVServiceObject *self, PyObject *args, PyObject *kwds) {
@@ -299,6 +325,7 @@ static PyObject* TVService_preferred_mode(TVServiceObject *self, PyObject *args,
     return Py_BuildValue("sI", HDMI_RES_GROUP_NAME(self->preferred_group), self->preferred_mode);
 }
 
+
 /* pylibi2c module methods */
 static PyMethodDef TVService_methods[] = {
 
@@ -306,6 +333,7 @@ static PyMethodDef TVService_methods[] = {
     {"set_preferred", (PyCFunction)TVService_set_preferred, METH_NOARGS, TVService_set_preferred_doc},
     {"set_explicit", (PyCFunction)TVService_set_explicit, METH_VARARGS, TVService_set_explicit_doc},
     {"power_off", (PyCFunction)TVService_power_off, METH_NOARGS, TVService_power_off_doc},
+    {"get_status", (PyCFunction)TVService_get_status, METH_NOARGS, TVService_get_status_doc},
     {"get_modes", (PyCFunction)TVService_get_modes, METH_NOARGS, TVService_get_modes_doc},
     {"__enter__", (PyCFunction)TVService_enter, METH_NOARGS, NULL},
     {"__exit__", (PyCFunction)TVService_exit, METH_NOARGS, NULL},
