@@ -1,7 +1,7 @@
 #ifndef _MMAL_GRAPH_H_
 
-#define PyMmalGraph_name "MmalGraph"
+#define MmalGraph_name "MmalGraph"
 
-PyTypeObject PyMmalGraphObjectType;
+PyTypeObject MmalGraphObjectType;
 
 #endif

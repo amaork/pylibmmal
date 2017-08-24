@@ -5,10 +5,10 @@
 void define_constants(PyObject *module) {
 
     PyObject *lcd = Py_BuildValue("i", LCD);
-	PyModule_AddObject(module, "LCD", lcd);
+    PyModule_AddObject(module, "LCD", lcd);
 
-	PyObject *hdmi = Py_BuildValue("i", HDMI);
-	PyModule_AddObject(module, "HDMI", hdmi);
+    PyObject *hdmi = Py_BuildValue("i", HDMI);
+    PyModule_AddObject(module, "HDMI", hdmi);
 
     PyObject *cea = Py_BuildValue("s", HDMI_CEA);
     PyModule_AddObject(module, "CEA", cea);
