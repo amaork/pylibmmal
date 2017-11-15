@@ -10,18 +10,34 @@ class TVServiceTest(unittest.TestCase):
     def test_status(self):
         print(self.tv.get_status())
 
+
     def test_support_modes(self):
-        print("HDMI Support modes:")
-        for mode in self.tv.get_modes():
-            print(mode)
-        print("HDMI Preferred mode:{}".format(self.tv.preferred_mode()))
+        with self.assertRaises(TypeError):
+            self.tv.get_modes()
+
+        with self.assertRaises(ValueError):
+            self.tv.get_modes("")
+
+        with self.assertRaises(ValueError):
+            self.tv.get_modes("3232")
+
+        print("HDMI Preferred mode:{}".format(self.tv.get_preferred_mode()))
+        for group in (pylibmmal.CEA, pylibmmal.DMT):
+            for mode in self.tv.get_modes(group):
+                print(mode)
 
     def test_cea_mode(self):
-        self.tv.set_explicit(pylibmmal.CEA, 22)
+        self.tv.set_explicit(group=pylibmmal.CEA, mode=22)
         time.sleep(3)
 
     def test_dmt_mode(self):
-        self.tv.set_explicit(pylibmmal.DMT, 22)
+        with self.assertRaises(ValueError):
+            self.tv.set_explicit("", 22)
+
+        with self.assertRaises(ValueError):
+            self.tv.set_explicit("123", 22)
+
+        self.tv.set_explicit(mode=22, group=pylibmmal.DMT)
         time.sleep(3)
 
     def test_preferred(self):

@@ -135,6 +135,7 @@ static PyObject *TVService_set_preferred(TVServiceObject *self, PyObject *args, 
 
 	if (hdmi_set_property(HDMI_PROPERTY_3D_STRUCTURE, HDMI_3D_FORMAT_NONE, 0) != 0) {
 
+		PyErr_SetFromErrno(PyExc_RuntimeError);
 		goto error;
 	}
 
@@ -151,6 +152,25 @@ error:
 }
 
 
+/* Convert group name to group */
+static HDMI_RES_GROUP_T get_group_from_name(const char *name) {
+
+	if (vcos_strcasecmp(HDMI_RES_GROUP_NAME(HDMI_RES_GROUP_CEA), name) == 0) {
+
+		return HDMI_RES_GROUP_CEA;
+	}
+	else if (vcos_strcasecmp(HDMI_RES_GROUP_NAME(HDMI_RES_GROUP_DMT), name) == 0) {
+
+		return HDMI_RES_GROUP_DMT;
+	}
+	else {
+
+		PyErr_Format(PyExc_ValueError, "invalid group '%s' (DMT, CEA)", name);
+		return HDMI_RES_GROUP_INVALID;
+	}
+}
+
+
 PyDoc_STRVAR(TVService_set_explicit_doc, "set_explicit(group, mode)\n\nPower on HDMI with explicit GROUP(CEA, DMT, CEA_3D_SBS, CEA_3D_TB, CEA_3D_FP, CEA_3D_FS) and MODE\n");
 static PyObject *TVService_set_explicit(TVServiceObject *self, PyObject *args, PyObject *kwds) {
 
@@ -160,40 +180,32 @@ static PyObject *TVService_set_explicit(TVServiceObject *self, PyObject *args, P
 	HDMI_RES_GROUP_T group = HDMI_RES_GROUP_INVALID;
 	static char *kwlist[] = {"group", "mode", NULL};
 
-	if (!PyArg_ParseTupleAndKeywords(args, kwds, "|si", kwlist, &group_name, &mode)) {
+	if (!PyArg_ParseTupleAndKeywords(args, kwds, "si:set_explicit", kwlist, &group_name, &mode)) {
 
-		fprintf(stderr, "Get args error\n");
-		goto out;
+		return NULL;
 	}
 
-	if (vcos_strcasecmp(HDMI_RES_GROUP_NAME(HDMI_RES_GROUP_CEA), group_name) == 0) {
+	/* Name to group */
+	if ((group = get_group_from_name(group_name)) == HDMI_RES_GROUP_INVALID) {
 
-		group = HDMI_RES_GROUP_CEA;
-	}
-	else if (vcos_strcasecmp(HDMI_RES_GROUP_NAME(HDMI_RES_GROUP_DMT), group_name) == 0) {
-
-		group = HDMI_RES_GROUP_DMT;
-	}
-	else {
-
-		fprintf(stderr, "Invalid group: %s\n", group_name);
-		goto out;
+		return NULL;
 	}
 
 	if (hdmi_set_property(HDMI_PROPERTY_3D_STRUCTURE, HDMI_3D_FORMAT_NONE, 0) != 0) {
 
+		PyErr_SetFromErrno(PyExc_RuntimeError);
 		goto error;
 	}
 
 	if (hdmi_set_property(HDMI_PROPERTY_PIXEL_CLOCK_TYPE, HDMI_PIXEL_CLOCK_TYPE_PAL, 0) != 0) {
 
+		PyErr_SetFromErrno(PyExc_RuntimeError);
 		goto error;
 	}
 
 	ret = vc_tv_hdmi_power_on_explicit_new(drive, group, mode);
 	CHECK_ERROR(ret, "Failed to power on HDMI with explicit settings (%s, mode %u)", HDMI_RES_GROUP_NAME(group), mode);
 
-out:
 	Py_INCREF(Py_None);
 	return Py_None;
 
@@ -249,49 +261,58 @@ static const char *aspect_ratio_str(HDMI_ASPECT_T aspect_ratio) {
 }
 
 
-PyDoc_STRVAR(TVService_get_modes_doc, "get_modes()\n\nGet supported modes for GROUP (CEA, DMT)\n");
+PyDoc_STRVAR(TVService_get_modes_doc, "get_modes(group)\n\nGet supported modes for GROUP (CEA, DMT)\n");
 static PyObject *TVService_get_modes(TVServiceObject *self, PyObject *args, PyObject *kwds) {
 
-	uint32_t num_modes, i, j;
+	uint32_t num_modes, j;
 	char *group_name = NULL;
 	PyObject *item = NULL, *modes = PyList_New(0);
+	HDMI_RES_GROUP_T group = HDMI_RES_GROUP_INVALID;
 	static TV_SUPPORTED_MODE_NEW_T supported_modes[MAX_MODE_ID];
-	HDMI_RES_GROUP_T groups[] = {HDMI_RES_GROUP_CEA, HDMI_RES_GROUP_DMT};
 
-	for (i = 0; i < vcos_countof(groups); i++) {
+	/* Get args */
+	if (!PyArg_ParseTuple(args, "s:get_modes", &group_name)) {
 
-		group_name = HDMI_RES_GROUP_NAME(groups[i]);
-		memset(supported_modes, 0, sizeof(supported_modes));
+		return NULL;
+	}
 
-		num_modes = vc_tv_hdmi_get_supported_modes_new(
-		                groups[i],
-		                supported_modes,
-		                vcos_countof(supported_modes),
-		                &self->preferred_group,
-		                &self->preferred_mode);
+	/* Name to group */
+	if ((group = get_group_from_name(group_name)) == HDMI_RES_GROUP_INVALID) {
 
-		if (num_modes < 0) {
+		return NULL;
+	}
 
-			fprintf(stderr, "Failed to get modes");
-			goto out;
-		}
 
-		/* Create modes list */
-		for (j = 0; j < num_modes; j++) {
+	/* Get specific group support modes */
+	memset(supported_modes, 0, sizeof(supported_modes));
+	num_modes = vc_tv_hdmi_get_supported_modes_new(
+	                group,
+	                supported_modes,
+	                vcos_countof(supported_modes),
+	                &self->preferred_group,
+	                &self->preferred_mode);
 
-			item = PyDict_New();
-			PyDict_SetItem(item, PyUnicode_FromString("mode"), PyLong_FromLong(supported_modes[j].code));
-			PyDict_SetItem(item, PyUnicode_FromString("rate"), PyLong_FromLong(supported_modes[j].frame_rate));
-			PyDict_SetItem(item, PyUnicode_FromString("clock"), PyLong_FromLong(supported_modes[j].pixel_freq / 1000000U));
+	if (num_modes < 0) {
 
-			PyDict_SetItemString(item, "group", PyUnicode_FromString(group_name));
-			PyDict_SetItemString(item, "scan_mode", PyUnicode_FromString(supported_modes[j].scan_mode ? "i" : "p"));
-			PyDict_SetItemString(item, "ratio", PyUnicode_FromString(aspect_ratio_str(supported_modes[j].aspect_ratio)));
-			PyDict_SetItemString(item, "res", PyUnicode_FromFormat("%ux%u", supported_modes[j].width, supported_modes[j].height));
+		PyErr_SetString(PyExc_RuntimeError, "Cannot get support modes");
+		goto out;
+	}
 
-			/* Append to modes */
-			PyList_Append(modes, item);
-		}
+	/* Create modes list */
+	for (j = 0; j < num_modes; j++) {
+
+		item = PyDict_New();
+		PyDict_SetItem(item, PyUnicode_FromString("mode"), PyLong_FromLong(supported_modes[j].code));
+		PyDict_SetItem(item, PyUnicode_FromString("rate"), PyLong_FromLong(supported_modes[j].frame_rate));
+		PyDict_SetItem(item, PyUnicode_FromString("clock"), PyLong_FromLong(supported_modes[j].pixel_freq / 1000000U));
+
+		PyDict_SetItemString(item, "group", PyUnicode_FromString(group_name));
+		PyDict_SetItemString(item, "scan_mode", PyUnicode_FromString(supported_modes[j].scan_mode ? "i" : "p"));
+		PyDict_SetItemString(item, "ratio", PyUnicode_FromString(aspect_ratio_str(supported_modes[j].aspect_ratio)));
+		PyDict_SetItemString(item, "res", PyUnicode_FromFormat("%ux%u", supported_modes[j].width, supported_modes[j].height));
+
+		/* Append to modes */
+		PyList_Append(modes, item);
 	}
 
 out:
@@ -326,10 +347,17 @@ error:
 }
 
 
-PyDoc_STRVAR(TVService_preferred_mode_doc, "preferred_mode()\n\nGet HDMI preferred modes for (GROUP, MODE)\n");
-static PyObject *TVService_preferred_mode(TVServiceObject *self, PyObject *args, PyObject *kwds) {
+PyDoc_STRVAR(TVService_get_preferred_mode_doc, "preferred_mode()\n\nGet HDMI preferred modes for (GROUP, MODE)\n");
+static PyObject *TVService_get_preferred_mode(TVServiceObject *self, PyObject *args, PyObject *kwds) {
 
-	TVService_get_modes(self, NULL, NULL);
+	PyObject *group = PyTuple_New(1);
+
+	PyTuple_SetItem(group, 0, Py_BuildValue("s", "CEA"));
+	TVService_get_modes(self, group, NULL);
+
+	PyTuple_SetItem(group, 0, Py_BuildValue("s", "DMT"));
+	TVService_get_modes(self, group, NULL);
+
 	return Py_BuildValue("sI", HDMI_RES_GROUP_NAME(self->preferred_group), self->preferred_mode);
 }
 
@@ -337,12 +365,12 @@ static PyObject *TVService_preferred_mode(TVServiceObject *self, PyObject *args,
 /* pylibi2c module methods */
 static PyMethodDef TVService_methods[] = {
 
-	{"preferred_mode", (PyCFunction)TVService_preferred_mode, METH_NOARGS, TVService_preferred_mode_doc},
+	{"get_preferred_mode", (PyCFunction)TVService_get_preferred_mode, METH_NOARGS, TVService_get_preferred_mode_doc},
 	{"set_preferred", (PyCFunction)TVService_set_preferred, METH_NOARGS, TVService_set_preferred_doc},
-	{"set_explicit", (PyCFunction)TVService_set_explicit, METH_VARARGS, TVService_set_explicit_doc},
+	{"set_explicit", (PyCFunction)TVService_set_explicit,  METH_VARARGS | METH_KEYWORDS, TVService_set_explicit_doc},
 	{"power_off", (PyCFunction)TVService_power_off, METH_NOARGS, TVService_power_off_doc},
 	{"get_status", (PyCFunction)TVService_get_status, METH_NOARGS, TVService_get_status_doc},
-	{"get_modes", (PyCFunction)TVService_get_modes, METH_NOARGS, TVService_get_modes_doc},
+	{"get_modes", (PyCFunction)TVService_get_modes, METH_VARARGS, TVService_get_modes_doc},
 	{"__enter__", (PyCFunction)TVService_enter, METH_NOARGS, NULL},
 	{"__exit__", (PyCFunction)TVService_exit, METH_NOARGS, NULL},
 	{NULL},
